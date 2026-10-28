@@ -351,14 +351,36 @@ export function retrieveBrandKnowledgeAndEvaluateRules(
         isWithinWindow = false;
         warnings.push('Customer explicitly stated item was ordered a year ago or in the distant past, exceeding store return/refund policy window. Decline return or refund.');
       } else {
-        missingInformation.push('Order reference number is required to look up fulfillment and delivery dates.');
+        isWithinWindow = false;
+        // Check if customer already provided a valid format order reference (e.g. WL-700 or SD-1001) in messages
+        const threadAndQueryText = [
+          ...messages.filter((m) => m.sender_type === 'customer').map((m) => m.body),
+          queryText
+        ].join(' ');
+        const orderRefMatch = threadAndQueryText.match(/\b((?:SD|WL)[-\s]?\d+)\b/i)?.[1]?.toUpperCase();
+
+        if (orderRefMatch) {
+          missingInformation.push(
+            'Delivery date is unconfirmed. The customer-facing delivery date is required before calculating refund or damage eligibility.'
+          );
+          warnings.push(
+            `Customer provided order number ${orderRefMatch}, but delivery date is unknown. Request the delivery/arrival date from the customer. Do not prematurely disclose return policy window days or approve return until delivery date is confirmed.`
+          );
+        } else {
+          missingInformation.push('Order reference number is required to look up fulfillment and delivery dates.');
+          missingInformation.push(
+            'Delivery date is unconfirmed. The customer-facing delivery date is required before calculating refund or damage eligibility.'
+          );
+          warnings.push('Order reference number and delivery date are unknown. Request order reference and delivery date before disclosing return policy windows.');
+        }
       }
     } else if (!order.delivered_at) {
       // Delivered date is unknown or item is in transit
+      isWithinWindow = false;
       missingInformation.push(
         'Delivery date is unconfirmed. The customer-facing delivery date is required before calculating refund or damage eligibility.'
       );
-      warnings.push('Item delivery date is unknown. Do not commit to return or refund eligibility until delivery is confirmed.');
+      warnings.push('Item delivery date is unknown. Ask customer when item arrived. Do not commit to return or refund eligibility or disclose return policy window days prematurely until delivery is confirmed.');
     } else {
       // Calculate elapsed time in UTC/local milliseconds
       const deliveryTime = new Date(order.delivered_at).getTime();
