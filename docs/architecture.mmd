@@ -1,0 +1,69 @@
+flowchart TD
+    subgraph Channels ["Omni-Channel Customer Sources"]
+        Shopify["Shopify Storefront"]
+        Zendesk["Zendesk / Gorgias"]
+        WhatsApp["WhatsApp / SMS / Email"]
+    end
+
+    subgraph Ingestion ["Ingestion & Deduplication"]
+        Gateway["API / Webhook Gateway\n(HMAC Signature Check)"]
+        RedisDedupe[("Redis Distributed Cache\n(SET NX Idempotency Key)")]
+        InboundQueue["Durable Inbound Queue\n(Kafka / SQS Partitioned by Brand)"]
+    end
+
+    subgraph Database ["Supabase PostgreSQL (Multi-Tenant RLS)"]
+        DB_Brands[("brands & brand_memberships")]
+        DB_Conversations[("conversations & messages")]
+        DB_KB[("kb_entries (Versioned Policies)")]
+        DB_Audit[("ai_generations & generation_sources")]
+        DB_Outbox[("transactional_outbox_events")]
+    end
+
+    subgraph Backend ["Serverless AI Gateway & Rules Engine"]
+        EdgeFunction["Supabase Edge Function\n(JWT & Membership Auth)"]
+        RetrievalEngine["Deterministic Retrieval Engine\n(Keyword Synonyms & Context Budget)"]
+        RuleEngine["Deterministic Rule Engine\n(Elapsed Delivery Days vs Policy Window)"]
+        ModelGateway["OpenRouter Model Gateway\n(Configurable Model & JSON Validator)"]
+        MockEngine["Deterministic Mock Engine\n(Offline Reviewer Fallback)"]
+    end
+
+    subgraph Client ["Agent Workspace UI (React 19 + Vite)"]
+        AgentUI["Agent Multi-Brand Workspace\n(Obsidian Theme + Micro-Interactions)"]
+        CustomerSim["Embedded Customer Simulator\n(Reviewer Test Persona)"]
+        ReviewPanel["Human Review & Approval Panel\n(Staleness Guard + Edit Diff)"]
+    end
+
+    subgraph Delivery ["Transactional Delivery & Reconciliation"]
+        OutboxRelay["Transactional Outbox Relay Worker\n(SKIP LOCKED Poller)"]
+        ExternalDispatch["Channel Delivery Adapters\n(Reconciliation & Exponential Backoff)"]
+    end
+
+    %% Ingestion Flow
+    Channels --> Gateway
+    Gateway <--> RedisDedupe
+    Gateway --> InboundQueue
+    InboundQueue --> DB_Conversations
+
+    %% Agent Flow
+    AgentUI <--> DB_Conversations
+    AgentUI <--> DB_Brands
+    CustomerSim --> DB_Conversations
+    
+    %% AI Flow
+    AgentUI -->|Trigger AI Request| EdgeFunction
+    EdgeFunction -->|Resolve Authorized Brand| DB_Conversations
+    EdgeFunction -->|Fetch Brand Policies| DB_KB
+    EdgeFunction --> RetrievalEngine
+    RetrievalEngine --> RuleEngine
+    RuleEngine --> ModelGateway
+    ModelGateway -.->|Fallback if Offline| MockEngine
+    ModelGateway -->|Structured Output| EdgeFunction
+    EdgeFunction -->|Save Audit Snapshot| DB_Audit
+    EdgeFunction --> ReviewPanel
+
+    %% Outbox & Dispatch Flow
+    ReviewPanel -->|Approve & Atomically Send| DB_Conversations
+    ReviewPanel -->|Enqueue Outgoing Event| DB_Outbox
+    DB_Outbox --> OutboxRelay
+    OutboxRelay --> ExternalDispatch
+    ExternalDispatch --> Channels

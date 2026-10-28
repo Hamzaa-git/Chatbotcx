@@ -1,0 +1,147 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Shadcn Theme Tokens */
+    --primary: #1d4ed8;
+    --primary-foreground: #ffffff;
+    --secondary: #f1f5f9;
+    --secondary-foreground: #0f172a;
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --accent: #eff6ff;
+    --accent-foreground: #1d4ed8;
+    --destructive: #ef4444;
+    --destructive-foreground: #ffffff;
+    --border: #e2e8f0;
+    --input: #e2e8f0;
+    --ring: #2563eb;
+    --radius: 0.5rem;
+
+    /* Datastraw Design Tokens */
+    --ds-bg-canvas: #f8fafc;
+    --ds-bg-surface: #ffffff;
+    --ds-bg-subtle: #f1f5f9;
+    --ds-border-light: #e2e8f0;
+    --ds-border-subtle: #cbd5e1;
+    --ds-blue-primary: #1d4ed8;
+    --ds-blue-accent: #2563eb;
+    --ds-blue-hover: #1e40af;
+    --ds-blue-light: #eff6ff;
+    --ds-text-primary: #0f172a;
+    --ds-text-secondary: #475569;
+    --ds-text-muted: #94a3b8;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--ds-bg-canvas);
+    color: var(--ds-text-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Datastraw Reusable Card Styles */
+.ds-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.875rem; /* 14px */
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease-in-out;
+}
+
+.ds-card-subtle {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.875rem;
+}
+
+/* Datastraw Signature Active Left-Accent Bar */
+.ds-card-active {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid #2563eb;
+  border-radius: 0.875rem;
+  box-shadow: 0 2px 6px -1px rgba(37, 99, 235, 0.08);
+}
+
+/* Datastraw Section Eyebrow Label */
+.ds-eyebrow {
+  font-size: 0.6875rem; /* 11px */
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+
+/* Datastraw Primary Button */
+.ds-btn-primary {
+  background-color: #1d4ed8;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.75rem; /* 12px */
+  border-radius: 0.5rem; /* 8px */
+  padding: 0.5rem 1rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: background-color 0.15s ease-in-out, transform 0.1s ease-in-out;
+}
+.ds-btn-primary:hover {
+  background-color: #1e40af;
+}
+
+/* Datastraw Secondary Button */
+.ds-btn-secondary {
+  background-color: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  font-weight: 600;
+  font-size: 0.75rem;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  transition: background-color 0.15s ease-in-out;
+}
+.ds-btn-secondary:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+}
+
+/* Focus Visible */
+*:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
