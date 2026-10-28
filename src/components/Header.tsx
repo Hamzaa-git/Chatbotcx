@@ -160,17 +160,10 @@ export const Header: React.FC<HeaderProps> = ({
                       ? 'bg-blue-600 text-white font-bold shadow-xs'
                       : 'text-slate-700 hover:text-slate-900 hover:bg-slate-50'
                   }`}
-                  title="System Architecture (Part 2 Production Scale)"
+                  title="Current System Architecture Diagram"
                 >
                   <Layers className={`w-3.5 h-3.5 ${activeView === 'architecture' ? 'text-white' : 'text-blue-600'}`} />
                   <span>Architecture</span>
-                  <span className={`text-[9px] font-mono px-1 py-0.2 rounded font-bold ${
-                    activeView === 'architecture'
-                      ? 'bg-blue-700 text-blue-100'
-                      : 'bg-blue-50 text-blue-700 border border-blue-200'
-                  }`}>
-                    Part 2
-                  </span>
                 </button>
               </div>
             </div>

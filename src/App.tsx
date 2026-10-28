@@ -654,7 +654,7 @@ export const App: React.FC = () => {
             />
           </div>
         ) : activeView === 'architecture' ? (
-          // VIEW 6: PART 2 SYSTEM ARCHITECTURE PRESENTATION
+          // VIEW 6: CURRENT SYSTEM ARCHITECTURE PRESENTATION
           <div className="flex-1 overflow-y-auto bg-slate-50">
             <ArchitectureView />
           </div>

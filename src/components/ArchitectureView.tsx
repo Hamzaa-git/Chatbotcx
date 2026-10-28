@@ -1,336 +1,271 @@
 import React, { useState } from 'react';
 import {
   Layers,
-  ShieldAlert,
-  Repeat,
-  Clock,
-  HelpCircle,
-  TrendingUp,
-  DollarSign,
-  Send,
-  ExternalLink,
   Download,
+  ExternalLink,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Maximize2,
+  ShieldCheck,
+  Cpu,
+  UserCheck,
+  Database,
   CheckCircle2,
-  Server
+  AlertCircle
 } from 'lucide-react';
-
-interface CalloutItem {
-  id: number;
-  title: string;
-  question: string;
-  icon: React.ReactNode;
-  summary: string;
-  details: string[];
-  codeSnippet?: string;
-  tag: string;
-}
+const currentArchitectureImage = '/current-architecture.png';
 
 export const ArchitectureView: React.FC = () => {
-  const [selectedCallout, setSelectedCallout] = useState<number>(1);
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
-  const callouts: CalloutItem[] = [
-    {
-      id: 1,
-      title: 'Tenant Isolation',
-      question: 'How Brand A’s conversations & policies remain inaccessible to Brand B',
-      icon: <ShieldAlert className="w-5 h-5 text-rose-500" />,
-      tag: 'Security & RLS',
-      summary: 'Multi-layer defense: Database engine RLS, composite foreign keys, and vector DB payload isolation.',
-      details: [
-        'PostgreSQL Row-Level Security (RLS) restricts queries to WHERE brand_id = current_setting("app.current_brand_id").',
-        'Composite foreign keys FOREIGN KEY (order_id, brand_id) prevent conversations from referencing cross-brand orders.',
-        'Qdrant Vector DB enforces hard payload filtering on brand_id before similarity scoring.',
-        'Brand Context Resolver resolves tenant identity strictly from trusted database records, never from client input.'
-      ],
-      codeSnippet: `CREATE POLICY brand_isolation_policy ON conversations\nFOR ALL TO authenticated\nUSING (brand_id = NULLIF(current_setting('app.current_brand_id', true), '')::uuid);`
-    },
-    {
-      id: 2,
-      title: 'Webhook Deduplication',
-      question: 'What happens when a webhook arrives twice (e.g. WhatsApp/Shopify retry)',
-      icon: <Repeat className="w-5 h-5 text-amber-500" />,
-      tag: 'Idempotency',
-      summary: 'Edge Redis SET-NX fast path + PostgreSQL database unique constraint durable path.',
-      details: [
-        'Edge API Gateway extracts natural event ID and computes sha256(provider + channel + event_id).',
-        'Atomic Redis command SET webhook:{key} "1" EX 86400 NX acknowledges duplicates with HTTP 200 within 50ms.',
-        'Postgres messages table enforces UNIQUE(conversation_id, client_request_id) with ON CONFLICT DO NOTHING.'
-      ],
-      codeSnippet: `-- Durable Database Ingestion Guard\nCONSTRAINT uq_messages_conversation_req \nUNIQUE (conversation_id, client_request_id);`
-    },
-    {
-      id: 3,
-      title: 'LLM & API Timeouts',
-      question: 'What happens when an external API or LLM times out',
-      icon: <Clock className="w-5 h-5 text-blue-500" />,
-      tag: 'Circuit Breaker',
-      summary: 'Tiered 8-second timeout, circuit breaker tripping after 5 failures, and multi-model fallback cascade.',
-      details: [
-        'Primary live gateway targets Google Gemini 1.5 Flash with sub-second inference.',
-        'If Gemini fails or times out (>8s), the orchestrator falls back to OpenRouter (Meta Llama-3.3-70B).',
-        'If third-party networks fail completely, the offline deterministic rule engine provides grounded draft suggestions.',
-        'Agent UI clearly badges fallback status while preserving full ability to edit or write manual responses.'
-      ]
-    },
-    {
-      id: 4,
-      title: 'Missing Evidence',
-      question: 'How the system handles missing policy evidence or unreliable AI output',
-      icon: <HelpCircle className="w-5 h-5 text-purple-500" />,
-      tag: 'Groundedness',
-      summary: 'Citation verification strips hallucinated policy IDs; missing info triggers needs_information status.',
-      details: [
-        'Safety & Citation Validator inspects generated draft: any policy ID not in the retrieved set is stripped.',
-        'If return requires proof (e.g., photo of damaged goods) or order reference is missing, status becomes needs_information.',
-        'Circular Loop Killer detects repeated customer disputes (>2 turns) and respectfully concludes the conversation.'
-      ]
-    },
-    {
-      id: 5,
-      title: 'Scaling from 20 to 500 Brands',
-      question: 'What is likely to break first when scaling to 500 brands and 5,000 agents',
-      icon: <TrendingUp className="w-5 h-5 text-emerald-500" />,
-      tag: 'Connection Management',
-      summary: 'PostgreSQL connection exhaustion is the first bottleneck, resolved via Supavisor / PgBouncer.',
-      details: [
-        '5,000 concurrent agents opening WebSockets/REST will crash PostgreSQL max_connections (typically 200–500).',
-        'Supavisor / PgBouncer in transaction pooling mode multiplexes 5,000 agent sessions over ~100 direct DB connections.',
-        'Noisy-neighbor queue starvation mitigated by partitioning Kafka/SQS by brand_id using DWRR scheduling.'
-      ]
-    },
-    {
-      id: 6,
-      title: 'Controlling AI Costs',
-      question: 'How AI costs are controlled without sacrificing response quality (5x Spend Surge)',
-      icon: <DollarSign className="w-5 h-5 text-yellow-500" />,
-      tag: 'Cost Optimization',
-      summary: 'Bounded context window (~600 tokens) and deterministic rule pre-execution reduce token burn by 75–85%.',
-      details: [
-        'Diagnosed 5x cost spike: uncompressed multi-turn history causes quadratic O(N²) prompt token explosion.',
-        'Engine bounds conversational history strictly to the last 3 customer turns (~250 tokens).',
-        'Deterministic date rules (e.g. 20-day delivery > 7-day window) run locally in TypeScript before calling the LLM.',
-        'JSON output contract forbids verbose chain-of-thought tokens, slashing output costs.'
-      ]
-    },
-    {
-      id: 7,
-      title: 'Delivery Recovery',
-      question: 'How a processed message is recovered if sending the final response fails',
-      icon: <Send className="w-5 h-5 text-indigo-500" />,
-      tag: 'Transactional Outbox',
-      summary: 'Atomic commit of agent message and outbox event with exponential backoff relay workers.',
-      details: [
-        'Agent approval executes an atomic transaction: inserts message, updates ticket, and inserts outbox_events row.',
-        'Asynchronous relay workers poll outbox_events using SELECT ... FOR UPDATE SKIP LOCKED.',
-        'Dispatches to WhatsApp API with exponential backoff and full jitter (1s, 2s, 4s, 8s, 16s).',
-        'Dead-Letter Queue (DLQ) alerts agents upon 5 failed attempts; zero customer messages are silently lost.'
-      ]
-    }
-  ];
-
-  const currentCallout = callouts.find((c) => c.id === selectedCallout) || callouts[0];
+  const handleZoomIn = () => setZoomLevel((prev) => Math.min(prev + 0.25, 2.5));
+  const handleZoomOut = () => setZoomLevel((prev) => Math.max(prev - 0.25, 0.75));
+  const handleResetZoom = () => setZoomLevel(1);
 
   return (
     <div className="max-w-[1700px] mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Header Banner */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-white shadow-md flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-white shadow-md flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
             <span className="bg-blue-600/20 text-blue-400 border border-blue-500/30 text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
-              Part 2 Architecture
+              System Architecture
             </span>
-            <span className="text-xs text-slate-400 font-mono">Datastraw Tech Lead Assessment</span>
+            <span className="text-xs text-slate-400 font-mono">Current Implementation Diagram</span>
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight mt-2 text-white">
-            Production-Scale Architecture (500 Brands • 5,000 Agents)
+            Current System Architecture
           </h1>
-          <p className="text-sm text-slate-400 mt-1 max-w-3xl">
-            Multi-channel ingestion (WhatsApp / Web / Email), Qdrant vector retrieval, PostgreSQL Row-Level Security, Supavisor connection pooling, and Transactional Outbox delivery.
+          <p className="text-sm text-slate-300 mt-1 max-w-3xl">
+            End-to-end operational blueprint showing customer inquiry ingestion, multi-tenant brand isolation, bounded rule evaluation, LLM drafting, and human-in-the-loop review.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
           <a
-            href="/system-architecture/index.html"
+            href="/Current_System_Architecture.pdf"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2 rounded-lg text-xs font-semibold shadow-xs transition-colors"
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
           >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span>Interactive Viewer</span>
+            <ExternalLink className="w-4 h-4" />
+            <span>Open PDF Report</span>
           </a>
           <a
-            href="/system-architecture/cx-reply-assistant-production-architecture.drawio"
-            download="cx-reply-assistant-production-architecture.drawio"
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors"
+            href="/current-architecture.png"
+            download="current-system-architecture.png"
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download .drawio</span>
+            <Download className="w-4 h-4" />
+            <span>Download PNG</span>
           </a>
         </div>
       </div>
 
-      {/* Target Scale Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-2xs">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tenant Scale</div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-1">500 Brands</div>
-          <div className="text-xs text-slate-500 mt-0.5">Isolated via Postgres RLS & Qdrant</div>
+      {/* Main Diagram Showcase Card */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+        {/* Diagram Action Toolbar */}
+        <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-blue-600" />
+            <span className="text-xs font-bold text-slate-800">Architecture Diagram</span>
+            <span className="text-[10px] text-slate-400 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
+              Draw.io Blueprint
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer text-xs flex items-center gap-1"
+              title="Zoom Out"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <span className="text-[11px] font-mono text-slate-600 px-2 py-1 bg-white border border-slate-200 rounded-lg">
+              {Math.round(zoomLevel * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer text-xs flex items-center gap-1"
+              title="Zoom In"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleResetZoom}
+              className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer text-xs flex items-center gap-1"
+              title="Reset Zoom"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="p-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors cursor-pointer text-xs flex items-center gap-1 font-semibold"
+              title="View Fullscreen"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span>Expand</span>
+            </button>
+          </div>
         </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-2xs">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Agent Concurrency</div>
-          <div className="text-2xl font-extrabold text-blue-600 mt-1">5,000 Agents</div>
-          <div className="text-xs text-slate-500 mt-0.5">Multiplexed via Supavisor pooler</div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-2xs">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cost Optimization</div>
-          <div className="text-2xl font-extrabold text-emerald-600 mt-1">-75% to -85%</div>
-          <div className="text-xs text-slate-500 mt-0.5">Bounded context (~600 tokens max)</div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-2xs">
-          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Human-In-The-Loop</div>
-          <div className="text-2xl font-extrabold text-purple-600 mt-1">100% Approval</div>
-          <div className="text-xs text-slate-500 mt-0.5">Zero unvetted replies sent</div>
+
+        {/* Diagram Image Container */}
+        <div className="p-6 bg-slate-50/80 flex flex-col items-center justify-start overflow-auto min-h-[580px] max-h-[820px]">
+          <div
+            className="transition-transform duration-200 ease-out flex justify-center w-full"
+            style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }}
+          >
+            <img
+              src={currentArchitectureImage}
+              alt="Current System Architecture Diagram"
+              className="max-w-[460px] w-full h-auto rounded-xl shadow-lg border border-slate-200/90 bg-white my-2"
+            />
+          </div>
         </div>
       </div>
 
-      {/* 7 Required Design Decisions (Interactive Callout Inspector) */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-2xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      {/* 4 Pipeline Stages (How the Current System Works) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Stage 1 */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-3">
+          <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
+            <Cpu className="w-5 h-5" />
+          </div>
           <div>
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-blue-600" />
-              Required Design Decisions (Callouts [1] to [7])
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Click any callout below to review the technical decision, trade-offs, and architecture implementation.
-            </p>
+            <span className="text-[10px] font-mono uppercase tracking-wider text-blue-600 font-bold">Stage 1</span>
+            <h3 className="text-sm font-bold text-slate-900 mt-0.5">Ingestion & Routing</h3>
           </div>
-        </div>
-
-        {/* Callout Selection Buttons */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-          {callouts.map((c) => {
-            const isSelected = c.id === selectedCallout;
-            return (
-              <button
-                key={c.id}
-                onClick={() => setSelectedCallout(c.id)}
-                className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-center transition-all cursor-pointer ${
-                  isSelected
-                    ? 'bg-blue-50 border-blue-500 text-blue-900 font-bold shadow-xs'
-                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }`}
-              >
-                <div className="mb-1">{c.icon}</div>
-                <div className="text-[11px] font-bold">[{c.id}] {c.title}</div>
-                <div className="text-[9px] text-slate-500 truncate w-full">{c.tag}</div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Selected Callout Detail Drawer */}
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-3">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold bg-blue-600 text-white px-2 py-0.5 rounded">
-                  Callout [{currentCallout.id}]
-                </span>
-                <span className="text-sm font-bold text-slate-900">{currentCallout.title}</span>
-                <span className="text-xs text-slate-500 font-medium">({currentCallout.tag})</span>
-              </div>
-              <p className="text-xs font-semibold text-slate-700 mt-1 italic">
-                "{currentCallout.question}"
-              </p>
-            </div>
-          </div>
-
-          <p className="text-xs text-slate-800 font-medium bg-white p-3 rounded border border-slate-200">
-            {currentCallout.summary}
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Customer inquiries are ingested from Web Chat or simulation channels. Brand identity is resolved strictly from verified database records with idempotency deduplication.
           </p>
+        </div>
 
-          <ul className="space-y-1.5">
-            {currentCallout.details.map((point, idx) => (
-              <li key={idx} className="flex items-start gap-2 text-xs text-slate-600">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span>{point}</span>
-              </li>
-            ))}
+        {/* Stage 2 */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-3">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+            <Database className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-600 font-bold">Stage 2</span>
+            <h3 className="text-sm font-bold text-slate-900 mt-0.5">Deterministic Rule Engine</h3>
+          </div>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Evaluates return windows, delivery dates, and damage windows locally in TypeScript before calling the AI. Strict tenant filter guarantees zero cross-brand policy leakage.
+          </p>
+        </div>
+
+        {/* Stage 3 */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-3">
+          <div className="w-9 h-9 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-600">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[10px] font-mono uppercase tracking-wider text-purple-600 font-bold">Stage 3</span>
+            <h3 className="text-sm font-bold text-slate-900 mt-0.5">Guardrailed AI Drafting</h3>
+          </div>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Gemini 3.5 Flash-Lite drafts policy-grounded replies enforcing JSON schemas. Customer text is quarantined as untrusted data to eliminate prompt injection risks.
+          </p>
+        </div>
+
+        {/* Stage 4 */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+            <UserCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[10px] font-mono uppercase tracking-wider text-amber-600 font-bold">Stage 4</span>
+            <h3 className="text-sm font-bold text-slate-900 mt-0.5">Human Approval & Audit</h3>
+          </div>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Support agents review, edit, or approve the draft. Version-tracked dispatch prevents stale replies. Every prompt, token count, and policy source is immutably logged.
+          </p>
+        </div>
+      </div>
+
+      {/* Architecture Benefits & Operational Trade-offs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Why This Works */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Why the Current Architecture Works
+            </h3>
+          </div>
+          <ul className="text-xs text-slate-600 space-y-2">
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-500 font-bold mt-0.5">✓</span>
+              <span><strong>Zero Hallucinations:</strong> Numeric date arithmetic (e.g. 20-day vs 7-day window) executes in deterministic TypeScript, never by probabilistic LLM guess.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-500 font-bold mt-0.5">✓</span>
+              <span><strong>Sub-Second Latency:</strong> Lightweight model selection (Gemini 3.5 Flash-Lite) generates grounded suggestions in ~800–1,200ms.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-500 font-bold mt-0.5">✓</span>
+              <span><strong>Staleness Guard:</strong> Any new customer message increments conversation version, immediately invalidating old pending drafts.</span>
+            </li>
           </ul>
+        </div>
 
-          {currentCallout.codeSnippet && (
-            <div className="mt-2">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                Implementation Blueprint
-              </div>
-              <pre className="bg-slate-900 text-slate-100 p-3 rounded text-xs font-mono overflow-x-auto">
-                {currentCallout.codeSnippet}
-              </pre>
+        {/* Operational Trade-offs */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600" />
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Operational Trade-offs & Limitations
+            </h3>
+          </div>
+          <ul className="text-xs text-slate-600 space-y-2">
+            <li className="flex items-start gap-2">
+              <span className="text-amber-500 font-bold mt-0.5">•</span>
+              <span><strong>Keyword Categorization:</strong> Uses synonym-based category matching rather than semantic embeddings; unusual phrases require synonym map entries.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-amber-500 font-bold mt-0.5">•</span>
+              <span><strong>Synchronous Ingestion:</strong> Ingestion and AI generation run inline on HTTP requests; high burst traffic relies on upstream provider quotas.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-amber-500 font-bold mt-0.5">•</span>
+              <span><strong>Single Gateway Relay:</strong> Dispatch directly sends message without an asynchronous message broker queue.</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Fullscreen Modal View */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex flex-col p-4 sm:p-6 animate-fadeIn">
+          <div className="flex items-center justify-between p-3 bg-slate-900 text-white rounded-t-xl border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-blue-400" />
+              <span className="text-xs font-bold">Current System Architecture — Fullscreen View</span>
             </div>
-          )}
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold cursor-pointer text-slate-200 transition-colors"
+            >
+              Close (ESC)
+            </button>
+          </div>
+          <div className="flex-1 bg-slate-900/95 rounded-b-xl overflow-y-auto p-6 flex flex-col items-center justify-start">
+            <img
+              src={currentArchitectureImage}
+              alt="Current System Architecture Fullscreen"
+              className="max-w-[540px] w-full h-auto object-contain rounded-lg shadow-2xl bg-white border border-slate-700 my-4"
+            />
+          </div>
         </div>
-      </div>
-
-      {/* 6 Layers Architecture Summary Table */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-2xs space-y-4">
-        <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-          <Server className="w-4 h-4 text-blue-600" />
-          The 6 Architectural Layers: Prototype vs. Scaled Production
-        </h2>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-slate-700 font-bold">
-                <th className="py-2.5 px-3">Layer</th>
-                <th className="py-2.5 px-3">Component Focus</th>
-                <th className="py-2.5 px-3">Implemented Prototype</th>
-                <th className="py-2.5 px-3">Proposed Production Scale</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-600">
-              <tr>
-                <td className="py-2.5 px-3 font-semibold text-slate-900">1. Experience & Channel</td>
-                <td className="py-2.5 px-3">Customer & Agent Entry</td>
-                <td className="py-2.5 px-3 text-blue-700 font-mono">React 19 / CustomerPortal / AgentPortal</td>
-                <td className="py-2.5 px-3 font-mono text-slate-800">Meta WhatsApp Cloud API + Shopify Webhooks</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-semibold text-slate-900">2. API & Application</td>
-                <td className="py-2.5 px-3">Gateway, Auth, Orchestrator</td>
-                <td className="py-2.5 px-3 text-blue-700 font-mono">Vercel API / Node Proxy (server.cjs)</td>
-                <td className="py-2.5 px-3 font-mono text-slate-800">Kong Gateway + Supabase Edge Functions</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-semibold text-slate-900">3. Background Processing</td>
-                <td className="py-2.5 px-3">Async Queues & Deduplication</td>
-                <td className="py-2.5 px-3 text-slate-400 italic">Synchronous client pings</td>
-                <td className="py-2.5 px-3 font-mono text-slate-800">Redis SET-NX + Kafka (Brand Partitioned) + DLQ</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-semibold text-slate-900">4. Knowledge & AI</td>
-                <td className="py-2.5 px-3">Retrieval, Prompt, LLM Gateway</td>
-                <td className="py-2.5 px-3 text-blue-700 font-mono">Deterministic SQL/Synonyms + Gemini 1.5</td>
-                <td className="py-2.5 px-3 font-mono text-slate-800">Qdrant Vector DB + Gemini 1.5 + OpenRouter</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-semibold text-slate-900">5. Data Layer</td>
-                <td className="py-2.5 px-3">PostgreSQL RLS & Pooling</td>
-                <td className="py-2.5 px-3 text-blue-700 font-mono">Postgres (10 tables, 001_initial_schema.sql)</td>
-                <td className="py-2.5 px-3 font-mono text-slate-800">Postgres Primary + Supavisor Pooler + Read Replicas</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-semibold text-slate-900">6. Security & Observability</td>
-                <td className="py-2.5 px-3">Tenant Isolation & Cost Telemetry</td>
-                <td className="py-2.5 px-3 text-blue-700 font-mono">Postgres RLS + Token usage logging</td>
-                <td className="py-2.5 px-3 font-mono text-slate-800">OpenTelemetry Tracing + Datadog / Grafana Spikes</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
