@@ -72,7 +72,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const cleanPath = req.url.replace(/^\/api\/gemini\/?/, '').split('?')[0] || 'models/gemini-2.5-flash:generateContent';
+    const urlObj = new URL(req.url || '', 'http://localhost');
+    const modelParam = urlObj.searchParams.get('model');
+    const defaultModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+    const cleanPath = modelParam
+      ? `models/${modelParam.replace(/^models\//, '')}:generateContent`
+      : (req.url.replace(/^\/api\/gemini\/?/, '').split('?')[0] || `models/${defaultModel}:generateContent`);
     const targetUrl = `https://generativelanguage.googleapis.com/v1beta/${cleanPath}?key=${apiKey.trim()}`;
 
     // Collect body

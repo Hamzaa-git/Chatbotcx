@@ -35,9 +35,9 @@ function geminiServerProxyPlugin(): Plugin {
         const urlObj = new URL(req.url || '', 'http://localhost');
         const modelQuery = urlObj.searchParams.get('model');
         const pathPart = urlObj.pathname.replace(/^\//, '');
-        const targetPath = modelQuery
-          ? `models/${modelQuery.replace(/^models\//, '')}:generateContent`
-          : pathPart || 'models/gemini-2.5-flash:generateContent';
+        const defaultModel = process.env.GEMINI_MODEL || env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+        const targetModel = modelQuery ? modelQuery.replace(/^models\//, '') : defaultModel;
+        const targetPath = `models/${targetModel}:generateContent`;
         const targetUrl = `https://generativelanguage.googleapis.com/v1beta/${targetPath}?key=${apiKey.trim()}`;
 
         // Collect incoming request body

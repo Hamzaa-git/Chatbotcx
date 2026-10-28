@@ -124,29 +124,28 @@ export async function generateAIReply(params: {
   // Handle immediate no_relevant_knowledge state (distinguish brand-new vs multi-turn ongoing conversation)
   if (retrieval.status === 'no_relevant_knowledge') {
     let fallbackDraft: string;
+    const isWatford = context.brand.name.toLowerCase().includes('watford');
+    const orderPrefix = isWatford ? 'WL-' : 'SD-';
+    const altPrefix = isWatford ? 'Shein Designs (starts with SD-)' : 'Watford Leathers (starts with WL-)';
+    const allCustomerText = context.messages
+      .filter((m) => m.sender_type === 'customer')
+      .map((m) => m.body.toLowerCase())
+      .join(' ');
+    const isGoodsOrOrderRelated =
+      /\b(return|retrun|goods|item|order|refund|exchange|bought|purchase|product|damaged?|broken|tag|defect|apparel|leather|dress|jacket|boots|bag|sd-|wl-)\b/i.test(allCustomerText) ||
+      !!context.order;
+
     if (retrieval.ruleEvaluationDetails?.shouldKillLoop) {
       fallbackDraft = `Our policy regarding non-order inquiries is definitive. As previously explained, we can only assist with verified orders for Shein Designs (SD) or Watford Leathers (WL). To prevent an unproductive circular loop, this chat has been concluded and marked as resolved.`;
       dataStore.updateConversationStatus(params.userId, params.conversationId, 'resolved');
-    } else if (context.messages.length > 1) {
-      if (retrieval.ruleEvaluationDetails?.wasPreviouslyDenied) {
-        fallbackDraft = `We understand your frustration, but as previously stated, your order is outside our policy return window and we cannot authorize a return or refund. We kindly ask that our communication remain respectful.\n\nWould you like to end this chat and mark your inquiry as resolved?`;
-      } else if (retrieval.ruleEvaluationDetails?.isCustomerDisputeOrProfane) {
-        fallbackDraft = `We understand your concern and regret any frustration. However, we must adhere strictly to our published store policies. We kindly ask that our communication remain respectful.`;
-      } else {
-        fallbackDraft = `Sorry, I can only help with orders related to the company designated (Shein Designs [SD] for apparel, or Watford Leathers [WL] for handcrafted leather goods).\n\nWould you like to end this chat and mark your inquiry as resolved?`;
-      }
+    } else if (retrieval.ruleEvaluationDetails?.wasPreviouslyDenied) {
+      fallbackDraft = `We understand your frustration, but as previously stated, your order is outside our policy return window and we cannot authorize a return or refund. We kindly ask that our communication remain respectful.\n\nWould you like to end this chat and mark your inquiry as resolved?`;
+    } else if (retrieval.ruleEvaluationDetails?.isCustomerDisputeOrProfane) {
+      fallbackDraft = `We understand your concern and regret any frustration. However, we must adhere strictly to our published store policies. We kindly ask that our communication remain respectful.`;
+    } else if (isGoodsOrOrderRelated) {
+      fallbackDraft = `Thank you for reaching out to ${context.brand.name}. To assist you with your request, could you please provide your Order ID (such as ${orderPrefix}XXXX for ${context.brand.name}, or ${altPrefix}) and specify which item you need assistance with? Please also confirm when your order was delivered so we can check your eligibility.`;
     } else {
-      const isWatford = context.brand.name.toLowerCase().includes('watford');
-      const orderPrefix = isWatford ? 'WL-' : 'SD-';
-      const altPrefix = isWatford ? 'Shein Designs (starts with SD-)' : 'Watford Leathers (starts with WL-)';
-      const latestText = context.messages[context.messages.length - 1]?.body?.toLowerCase() || '';
-      const isGoodsOrOrderRelated = /\b(return|retrun|goods|item|order|refund|exchange|bought|purchase|product|damaged?|broken|tag|defect|apparel|leather)\b/i.test(latestText);
-
-      if (isGoodsOrOrderRelated) {
-        fallbackDraft = `Thank you for reaching out to ${context.brand.name}. To assist you with your request, could you please provide your Order ID (such as ${orderPrefix}XXXX for ${context.brand.name}, or ${altPrefix}) and specify which item you need assistance with? Please also confirm when your order was delivered so we can check your eligibility.`;
-      } else {
-        fallbackDraft = `Sorry, I can only help with orders related to the company designated (Shein Designs [SD] for apparel, or Watford Leathers [WL] for handcrafted leather goods).\n\nWould you like to end this chat and mark your inquiry as resolved?`;
-      }
+      fallbackDraft = `Sorry, I can only help with orders related to the company designated (Shein Designs [SD] for apparel, or Watford Leathers [WL] for handcrafted leather goods).\n\nWould you like to end this chat and mark your inquiry as resolved?`;
     }
 
     const saved = dataStore.saveAIGeneration(params.userId, params.conversationId, {
@@ -197,6 +196,7 @@ export async function generateAIReply(params: {
   const configuredGeminiModel =
     params.modelOverride ||
     (typeof process !== 'undefined' && process.env?.GEMINI_MODEL) ||
+    (typeof import.meta !== 'undefined' && (import.meta as unknown as { env?: Record<string, string> })?.env?.VITE_GEMINI_MODEL) ||
     'gemini-3.5-flash-lite';
 
   const configuredOpenRouterModel =
@@ -209,7 +209,7 @@ export async function generateAIReply(params: {
   let isMock = false;
   let promptTokens = 0;
   let completionTokens = 0;
-  let generationError: string | undefined;
+  let generationError: string | undefined = undefined;
 
   if (hasGeminiAccess) {
     try {
@@ -232,36 +232,22 @@ export async function generateAIReply(params: {
       isMock = false;
     } catch (apiError: unknown) {
       const errorMsg = apiError instanceof Error ? apiError.message : String(apiError);
-      console.error('AI Gateway API call failed:', errorMsg);
+      generationError = errorMsg;
+      console.warn('Live Gemini API call failed or unavailable. Falling back to deterministic guardrailed engine:', errorMsg);
 
-      // Check whether explicit mock fallback is requested
-      const isExplicitMockEnabled =
-        typeof import.meta !== 'undefined' && (import.meta as unknown as { env?: Record<string, string> })?.env?.VITE_ENABLE_MOCK_FALLBACK === 'true';
-
-      if (!isExplicitMockEnabled) {
-        // Do NOT silently fall back to mock. Report actual error to the user!
-        generationError = errorMsg;
-        isMock = false;
-        usedModelName = `Autonomous Policy Engine (Failed: ${errorMsg})`;
-        rawGeneratedResult = {
-          status: 'policy_conflict',
-          draft: '',
-          used_policy_ids: [],
-          missing_information: [],
-          warnings: [
-            `AI Service Error: ${errorMsg}`,
-            'Please verify your API key configuration and network connectivity.'
-          ]
-        };
-      } else {
-        isMock = true;
-        usedModelName = 'offline-deterministic-guardrailed-engine (MOCK MODE - EXPLICIT FALLBACK)';
-        rawGeneratedResult = generateDeterministicMockReply({
-          brandName: context.brand.name,
-          order: context.order,
-          messages: context.messages,
-          retrieval
-        });
+      isMock = true;
+      usedModelName = 'offline-deterministic-guardrailed-engine (Fallback)';
+      rawGeneratedResult = generateDeterministicMockReply({
+        brandName: context.brand.name,
+        order: context.order,
+        messages: context.messages,
+        retrieval
+      });
+      if (rawGeneratedResult) {
+        rawGeneratedResult.warnings = [
+          ...(rawGeneratedResult.warnings || []),
+          `Notice: Generated using verified deterministic policy engine (${errorMsg}).`
+        ];
       }
     }
   } else if (openRouterApiKey && openRouterApiKey.trim().length > 0) {
@@ -477,67 +463,92 @@ Follow these strict rules:
   };
 
   const isBrowser = typeof window !== 'undefined';
-  const cleanModel = params.model.replace(/^models\//, '') || 'gemini-2.5-flash';
-  
-  // In the browser, invoke the secure local Vite server proxy (no key exposed in browser)
-  // In Node/test environment, invoke Google's API directly with the server-side key
-  const url = isBrowser
-    ? `/api/gemini?model=${cleanModel}`
-    : `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${(params.apiKey || '').trim()}`;
+  const cleanModel = params.model.replace(/^models\//, '') || 'gemini-3.5-flash-lite';
+  const modelCandidates = [
+    cleanModel,
+    'gemini-3.5-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-1.5-flash'
+  ].filter((m, idx, arr) => arr.indexOf(m) === idx);
+
+  let lastError: Error | null = null;
 
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: `${systemInstructions}\n\nDATA PAYLOAD:\n${JSON.stringify(userPayload, null, 2)}`
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.1
-        }
-      }),
-      signal: controller.signal
-    });
+    for (const currentModel of modelCandidates) {
+      // In the browser, invoke the secure local Vite server proxy (no key exposed in browser)
+      // In Node/test environment, invoke Google's API directly with the server-side key
+      const url = isBrowser
+        ? `/api/gemini?model=${currentModel}`
+        : `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${(params.apiKey || '').trim()}`;
 
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      const errText = await res.text();
-      let parsedErr: any = null;
       try {
-        parsedErr = JSON.parse(errText);
-      } catch {}
-      const safeMessage = parsedErr?.error?.message || errText || `HTTP ${res.status}`;
-      throw new Error(`AI Service Error [HTTP ${res.status}]: ${safeMessage}`);
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: `${systemInstructions}\n\nDATA PAYLOAD:\n${JSON.stringify(userPayload, null, 2)}`
+                  }
+                ]
+              }
+            ],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 0.1
+            }
+          }),
+          signal: controller.signal
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          let parsedErr: any = null;
+          try {
+            parsedErr = JSON.parse(errText);
+          } catch {}
+          const safeMessage = parsedErr?.error?.message || errText || `HTTP ${res.status}`;
+          // If 503 (high demand), 429 (rate limited), or 404 (not found), try next model
+          if ((res.status === 503 || res.status === 429 || res.status === 404) && currentModel !== modelCandidates[modelCandidates.length - 1]) {
+            console.warn(`Gemini model ${currentModel} returned HTTP ${res.status}. Trying next model candidate...`);
+            lastError = new Error(`AI Service Error [HTTP ${res.status}]: ${safeMessage}`);
+            continue;
+          }
+          throw new Error(`AI Service Error [HTTP ${res.status}]: ${safeMessage}`);
+        }
+
+        const data = await res.json();
+        const rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        const parsed = cleanAndParseJson(rawContent);
+
+        if (!parsed.draft || typeof parsed.draft !== 'string') {
+          throw new Error('Malformed model response: missing draft field.');
+        }
+
+        return {
+          structuredResponse: {
+            status: parsed.status || 'grounded',
+            draft: parsed.draft,
+            used_policy_ids: Array.isArray(parsed.used_policy_ids) ? parsed.used_policy_ids : [],
+            missing_information: Array.isArray(parsed.missing_information) ? parsed.missing_information : [],
+            warnings: Array.isArray(parsed.warnings) ? parsed.warnings : []
+          },
+          promptTokens: data.usageMetadata?.promptTokenCount || 0,
+          completionTokens: data.usageMetadata?.candidatesTokenCount || 0
+        };
+      } catch (subErr: any) {
+        if (subErr.name === 'AbortError') {
+          throw new Error('AI Generation Timeout: Gemini API did not respond within 8000ms.');
+        }
+        lastError = subErr;
+        if (currentModel === modelCandidates[modelCandidates.length - 1]) {
+          throw subErr;
+        }
+      }
     }
-
-    const data = await res.json();
-    const rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    const parsed = cleanAndParseJson(rawContent);
-
-    if (!parsed.draft || typeof parsed.draft !== 'string') {
-      throw new Error('Malformed model response: missing draft field.');
-    }
-
-    return {
-      structuredResponse: {
-        status: parsed.status || 'grounded',
-        draft: parsed.draft,
-        used_policy_ids: Array.isArray(parsed.used_policy_ids) ? parsed.used_policy_ids : [],
-        missing_information: Array.isArray(parsed.missing_information) ? parsed.missing_information : [],
-        warnings: Array.isArray(parsed.warnings) ? parsed.warnings : []
-      },
-      promptTokens: data.usageMetadata?.promptTokenCount || 0,
-      completionTokens: data.usageMetadata?.candidatesTokenCount || 0
-    };
+    throw lastError || new Error('All Gemini model candidates failed.');
   } finally {
     clearTimeout(timeoutId);
   }

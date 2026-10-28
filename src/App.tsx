@@ -322,6 +322,17 @@ export const App: React.FC = () => {
         userId: currentUser.id
       });
       setCurrentDraft(output);
+
+      // In Customer Portal view, automatically dispatch the AI reply so customer sees the response!
+      if (activeView === 'customer' && output.draft) {
+        dataStore.sendMessage(
+          currentUser.id,
+          currentConversationContext.conversation.id,
+          'agent',
+          output.draft,
+          `ai-reply-${Date.now()}`
+        );
+      }
       triggerStoreUpdate();
     } catch (err) {
       console.error('Failed to generate automated reply for customer message:', err);
@@ -486,6 +497,17 @@ export const App: React.FC = () => {
         userId: currentUser.id
       });
       setCurrentDraft(output);
+
+      // In Customer Portal view, automatically dispatch the AI reply so customer sees the response!
+      if (activeView === 'customer' && output.draft) {
+        dataStore.sendMessage(
+          currentUser.id,
+          ticket.conversation.id,
+          'agent',
+          output.draft,
+          `ai-reply-${Date.now()}`
+        );
+      }
       triggerStoreUpdate();
     } catch (err) {
       console.error('Failed to generate initial reply for customer ticket:', err);
